@@ -1,0 +1,74 @@
+version: '3'
+
+services: #diferent parts of the program
+  poll: #define poll's webpage
+    build: ./poll #run poll app in python
+    depends_on: #use redis
+      - redis
+    ports:
+      - "5000:80" #default port for Flask web server (5000)
+    networks:
+      - poll-tier #allows poll to comunicate with redis
+    restart: always #restarts containers automatically in case they fail unexpectedly
+    environment: #use postgres
+      - "POSTGRES_USER=postgres"
+      - "POSTGRES_PASSWORD=password"
+      - "POSTGRES_DB=postgres"
+
+  redis: #define redis
+    image: redis #use redis official image
+    ports:
+      - "6379" #opens port 6379
+    restart: always
+    networks: #allows redis to comunicate with poll and the worker
+      - poll-tier
+      - back-tier
+
+  worker: #define worker
+    build: ./worker
+    depends_on:
+      - redis
+      - db
+    networks:
+      - back-tier
+    restart: always
+    environment:
+      - "POSTGRES_USER=postgres"
+      - "POSTGRES_PASSWORD=password"
+      - "POSTGRES_DB=postgres"
+
+  db: #database for program
+    image: postgres:13.2 #postgres offitial image (database used)
+    restart: always
+    networks:
+      - result-tier
+      - back-tier
+    volumes:
+      - db-data:/var/lib/postgresql/data #allows database to be persistent if container dies
+      - "./schema.sql:/docker-entrypoint-initdb.d/schema.sql" #The path of data in the official PostgreSQL image is documented on Docker Hub
+    environment:
+      - "POSTGRES_USER=postgres"
+      - "POSTGRES_PASSWORD=password"
+      - "POSTGRES_DB=postgres"
+
+  result: #result webpage
+    build: ./result
+    depends_on:
+      - db #gets info from database to display
+    ports:
+      - "5001:80" #port 5001 to show results
+    networks:
+      - result-tier
+    restart: always
+    environment:
+      - "POSTGRES_USER=postgres"
+      - "POSTGRES_PASSWORD=password"
+      - "POSTGRES_DB=postgres"
+
+networks: #all networks used
+  poll-tier:
+  back-tier:
+  result-tier:
+
+volumes: #volumes used
+  db-data:
